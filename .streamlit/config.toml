@@ -1,0 +1,12 @@
+# Native Streamlit widgets: tuned for light shell. Dark mode is layered via
+# injected CSS in main.py so the in-app theme toggle can switch without restart.
+[client]
+toolbarMode = "viewer"
+
+[theme]
+base = "light"
+primaryColor = "#4f46e5"
+backgroundColor = "#f4f4f5"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#18181b"
+font = "sans serif"

@@ -210,6 +210,20 @@ html, body, [class*="css"] {{
   border-bottom: 1px solid {t["border"]};
 }}
 
+/* Hide Streamlit top toolbar (⋮ menu etc.) */
+[data-testid="stToolbar"] {{
+  display: none !important;
+}}
+[data-testid="stMainMenu"] {{
+  display: none !important;
+}}
+#MainMenu {{
+  display: none !important;
+}}
+header [data-testid="stToolbarActionButton"] {{
+  display: none !important;
+}}
+
 /* Main scroll area starts under the fixed Streamlit header; extra room for our nav row. */
 [data-testid="stMain"] .block-container {{
   padding-top: clamp(4.5rem, 5rem + 2vw, 6.25rem) !important;
@@ -422,7 +436,6 @@ def render_navbar(t: dict) -> None:
 </div>""",
             unsafe_allow_html=True,
         )
-        st.caption("FUZZY · MAMDANI · STREAMLIT")
     with c_nav:
         nav_options = list(range(len(NAV_ITEMS)))
         sel = st.segmented_control(
@@ -500,13 +513,48 @@ def hero_banner(t: dict) -> None:
     )
 
 
-def pipeline_strip(t: dict) -> None:
-    """Decorative 'live pipeline' row inspired by the reference dashboard."""
+def pipeline_strip(t: dict, result: dict | None = None) -> None:
+    """Live pipeline preview.
+
+    The UI reacts to inputs by mapping the current inference result into 4
+    normalized progress values. Falls back to a quiet/neutral state if no
+    result is available yet.
+    """
+    result = result or {}
+    success = bool(result.get("success", False))
+
+    antecedent_mu = result.get("antecedent_mu") or []
+    rule_firings = result.get("rule_firings") or []
+    skor = float(result.get("skor", 0.0) or 0.0)
+    defuzz_method = str(result.get("defuzz_method") or "—")
+
+    def _clamp01(x: float) -> float:
+        return max(0.0, min(1.0, float(x)))
+
+    # FUZZIFY: average membership across antecedents/terms.
+    if antecedent_mu:
+        mus = [float(r.get("mu", 0.0) or 0.0) for r in antecedent_mu]
+        fuzzify = float(np.mean([_clamp01(m) for m in mus])) if mus else 0.0
+    else:
+        fuzzify = 0.0
+
+    # RULE FIRE: strongest rule firing (how "confident" the rule base is).
+    if rule_firings:
+        strengths = [float(r.get("strength", 0.0) or 0.0) for r in rule_firings]
+        rule_fire = _clamp01(max(strengths)) if strengths else 0.0
+        aggregate = _clamp01(float(np.sum([_clamp01(s) for s in strengths])) / max(1, len(strengths)))
+    else:
+        rule_fire = 0.0
+        aggregate = 0.0
+
+    # DEFUZZ: final score on [0,100] normalized.
+    defuzz = _clamp01(skor / 100.0)
+
     cards = [
-        ("FUZZIFY", "Girdi üyelikleri", 78, True),
-        ("RULE FIRE", "Kural birleşimi", 62, False),
-        ("AGGREGATE", "Maks birleştirme", 55, False),
-        ("DEFUZZ", "Centroid / WA", 71, False),
+        ("FUZZIFY", f"Girdi üyelikleri · {fuzzify*100:.0f}%", int(round(100 * fuzzify)), success),
+        ("RULE FIRE", f"En güçlü kural · {rule_fire*100:.0f}%", int(round(100 * rule_fire)), success),
+        ("AGGREGATE", f"Ortalama ateşleme · {aggregate*100:.0f}%", int(round(100 * aggregate)), success),
+        ("DEFUZZ", f"Skor · {skor:.0f} / 100", int(round(100 * defuzz)), success),
     ]
     parts = []
     for title, sub, pct, pulse in cards:
@@ -544,7 +592,7 @@ def pipeline_strip(t: dict) -> None:
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
     <span style="font-size:0.68rem; font-weight:800; letter-spacing:0.2em; color:{t["muted"]};">LIVE CONTROL PREVIEW</span>
     <span style="font-size:0.72rem; font-weight:600; color:{t["neon"]}; font-family: 'JetBrains Mono', monospace;">
-      <span style="color:{t["neon"]};">●</span> Streaming
+      <span style="color:{t["neon"]};">●</span> {defuzz_method}
     </span>
   </div>
   <div style="display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px;">
@@ -727,6 +775,7 @@ def tab_dashboard(t: dict) -> None:
         grade = st.slider("Yol eğimi (°)", -20, 20, 0, step=1)
 
     result = engine.evaluate(rpm, throttle, grade)
+    pipeline_strip(t, result)
 
     with col_right:
         st.markdown(
@@ -885,7 +934,7 @@ def tab_compare(t: dict) -> None:
 def tab_trajectory(t: dict) -> None:
     section_title("Sentetik sürüş döngüsü", "📈", t)
     st.caption(
-        "Bulanık (Mamdani) ve crisp baseline; raporda kıyaslama metriği olarak kullanılabilir."
+        "Bulanık (Mamdani) ve crisp baseline"
     )
     car = st.selectbox("Araç (trajectory)", list(ENGINE_CONFIGS.keys()), key="tr_car")
     n = st.slider("Adım sayısı", 30, 150, 80, step=10)
@@ -952,7 +1001,6 @@ def main() -> None:
     inject_custom_css(t)
     render_navbar(t)
     hero_banner(t)
-    pipeline_strip(t)
 
     pages = (tab_dashboard, tab_diagnostics, tab_compare, tab_trajectory)
     pages[st.session_state.page](t)

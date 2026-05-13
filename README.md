@@ -20,7 +20,7 @@ Destekleyici modüller:
 - `**trajectory.py**` — Sentetik sürüş döngüsü ve toplu değerlendirme.
 - `**baselines.py**` — Bulanık olmayan kaba (crisp) kıyaslama.
 
-Akademik özet: `docs/TECHNICAL.md`.
+Akademik özet: `docs/TECHNICAL.md`. Üyelik fonksiyonları ve kural tabanı: `docs/MEMBERSHIP_AND_RULES.md`.
 
 ## Teknik özellikler
 
